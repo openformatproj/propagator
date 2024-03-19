@@ -83,8 +83,8 @@ class Resource:
                 match t:
                     case pathlib.Path:
                         return self.location.exists()
-    def build(self):
-        return self.builder(self.location)
+    def build(self, requirements):
+        return self.builder(self.location, requirements)
     def update(self, requirements):
         return self.updater(self.location, requirements)
     def __le__(self, other):
@@ -159,48 +159,47 @@ class Propagator:
             for identifier in identifiers:
                 target = self.resources[identifier]
                 requirement_identifiers = list(self.graph.predecessors(identifier))
-                if len(requirement_identifiers) == 0: # target has no requirements
-                    if not target.exists():
-                        try:
-                            self.events.append(Event(EventTypes.LAUNCHED_BUILD, target))
-                            self.history.append(self.events[-1])
-                            details = target.build()
-                            if not target.exists():
-                                self.errors.append(Error(ErrorTypes.NOT_PERFORMED_BUILD, target))
-                                self.history.append(self.errors[-1])
-                                if block_propagation_level >= 2:
-                                    bar()
-                                    break
-                            else:
-                                event = Event(EventTypes.PERFORMED_BUILD, target)
-                                event.add_details(details)
-                                self.events.append(event)
-                                self.history.append(self.events[-1])
-                        except Exception as e:
-                            error = Error(ErrorTypes.FAILED_BUILD, target)
-                            error.add_details(e)
-                            self.errors.append(error)
+                requirements = {}
+                all_requirements_found = True
+                for identifier in requirement_identifiers:
+                    requirement = self.resources[identifier]
+                    if not requirement.exists():
+                        self.errors.append(Error(ErrorTypes.NOT_FOUND_REQUIREMENT, requirement, target))
+                        self.history.append(self.errors[-1])
+                        all_requirements_found = False
+                    else:
+                        requirements[identifier] = requirement
+                if not all_requirements_found: # not all requirements have been found
+                    bar()
+                    if block_propagation_level >= 1:
+                        break
+                    continue
+                if not target.exists():
+                    try:
+                        self.events.append(Event(EventTypes.LAUNCHED_BUILD, target))
+                        self.history.append(self.events[-1])
+                        details = target.build(requirements)
+                        if not target.exists():
+                            self.errors.append(Error(ErrorTypes.NOT_PERFORMED_BUILD, target))
                             self.history.append(self.errors[-1])
-                            if block_propagation_level >= 1:
+                            if block_propagation_level >= 2:
                                 bar()
                                 break
+                        else:
+                            event = Event(EventTypes.PERFORMED_BUILD, target)
+                            event.add_details(details)
+                            self.events.append(event)
+                            self.history.append(self.events[-1])
+                    except Exception as e:
+                        error = Error(ErrorTypes.FAILED_BUILD, target)
+                        error.add_details(e)
+                        self.errors.append(error)
+                        self.history.append(self.errors[-1])
+                        if block_propagation_level >= 1:
+                            bar()
+                            break
                     bar()
                 else:
-                    requirements = {}
-                    all_requirements_found = True
-                    for identifier in requirement_identifiers:
-                        requirement = self.resources[identifier]
-                        if not requirement.exists():
-                            self.errors.append(Error(ErrorTypes.NOT_FOUND_REQUIREMENT, requirement, target))
-                            self.history.append(self.errors[-1])
-                            all_requirements_found = False
-                        else:
-                            requirements[identifier] = requirement
-                    if not all_requirements_found: # not all requirements have been found
-                        bar()
-                        if block_propagation_level >= 1:
-                            break
-                        continue
                     launched_update = False
                     failed_update = False
                     for identifier in requirement_identifiers:
@@ -243,7 +242,7 @@ class Propagator:
         if errs > 0:
             raise Error(ErrorTypes.PROPAGATION, errs)
 
-def void_builder(location):
+def void_builder(location, requirements):
     pass
 
 def void_updater(location, requirements):
