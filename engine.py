@@ -242,8 +242,5 @@ class Propagator:
         if errs > 0:
             raise Error(ErrorTypes.PROPAGATION, errs)
 
-def void_builder(location, requirements):
-    pass
-
-def void_updater(location, requirements):
+def void_function(location, requirements):
     pass
