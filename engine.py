@@ -20,8 +20,10 @@ class Event:
                 self.details = f"update of '{args[0].identifier}' launched"
             case EventTypes.PERFORMED_UPDATE:
                 self.details = f"update of '{args[0].identifier}' performed"
-    def add_details(self, e):
-        self.details += f' -> {e}'
+        self.external_details = None
+    def add_external_details(self, details):
+        self.details += f' -> {details}'
+        self.external_details = details
 
 class ErrorTypes:
     BAD_PATH = 0
@@ -62,8 +64,10 @@ class Error(Exception):
             case ErrorTypes.PROPAGATION:
                 self.details = f"'{args[0]}' errors have been detected during propagation"
         super().__init__(self.details)
-    def add_details(self, e):
-        self.details += f' -> {e}'
+        self.external_details = None
+    def add_external_details(self, details):
+        self.details += f' -> {details}'
+        self.external_details = details
 
 ResourceTypes = [
     pathlib.Path
@@ -187,12 +191,12 @@ class Propagator:
                                 break
                         else:
                             event = Event(EventTypes.PERFORMED_BUILD, target)
-                            event.add_details(details)
+                            event.add_external_details(details)
                             self.events.append(event)
                             self.history.append(self.events[-1])
                     except Exception as e:
                         error = Error(ErrorTypes.FAILED_BUILD, target)
-                        error.add_details(e)
+                        error.add_external_details(e)
                         self.errors.append(error)
                         self.history.append(self.errors[-1])
                         if block_propagation_level >= 1:
@@ -212,7 +216,7 @@ class Propagator:
                                 details = target.update(requirements)
                             except Exception as e:
                                 error = Error(ErrorTypes.FAILED_UPDATE, target)
-                                error.add_details(e)
+                                error.add_external_details(e)
                                 self.errors.append(error)
                                 self.history.append(self.errors[-1])
                                 failed_update = True
@@ -234,7 +238,7 @@ class Propagator:
                         break
                     if launched_update and not not_performed_update:
                         event = Event(EventTypes.PERFORMED_UPDATE, target)
-                        event.add_details(details)
+                        event.add_external_details(details)
                         self.events.append(event)
                         self.history.append(self.events[-1])
                     bar()
