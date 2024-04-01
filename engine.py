@@ -130,6 +130,7 @@ class Propagator:
                                 match t:
                                     case pathlib.Path:
                                         return True
+        return False
     def add(self, requirement, target):
         if not Propagator.valid_dependency(requirement, target):
             raise Error(ErrorTypes.NOT_VALID_DEPENDENCY, requirement, target)
