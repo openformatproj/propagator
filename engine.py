@@ -1,9 +1,10 @@
 import networkx as nx
 import pathlib # https://realpython.com/python-pathlib/
 import matplotlib.pyplot as plt
+from enum import IntEnum
 from alive_progress import alive_bar
 
-class EventTypes:
+class EventTypes(IntEnum):
     LAUNCHED_BUILD = 0
     PERFORMED_BUILD = 1
     LAUNCHED_UPDATE = 2
@@ -25,7 +26,7 @@ class Event:
         self.details += f' -> {details}'
         self.external_details = details
 
-class ErrorTypes:
+class ErrorTypes(IntEnum):
     BAD_PATH = 0
     NOT_VALID_DEPENDENCY = 1
     RESOURCES_IDENTIFIERS = 2
@@ -61,9 +62,7 @@ class Error(Exception):
                 self.details = f"update of '{args[0].identifier}' failed, update function raised an exception"
             case ErrorTypes.NOT_PERFORMED_UPDATE:
                 self.details = f"update of '{args[0].identifier}' hasn't been really performed (update function hasn't updated anything)"
-            case ErrorTypes.PROPAGATION:
                 self.details = f"'{args[0]}' errors have been detected during propagation"
-        super().__init__(self.details)
         self.external_details = None
     def add_external_details(self, details):
         self.details += f' -> {details}'
@@ -82,35 +81,21 @@ class Resource:
         # TODO check if location exists or is creatable
         # raise Error(ErrorTypes.BAD_PATH)
     def exists(self):
-        for t in ResourceTypes:
-            if isinstance(self.location, t):
-                match t:
-                    case pathlib.Path:
-                        return self.location.exists()
+        if isinstance(self.location, pathlib.Path):
+            return self.location.exists()
+        return False # Or handle other types
     def build(self, requirements):
         return self.builder(self.location, requirements)
     def update(self, requirements):
         return self.updater(self.location, requirements)
     def __le__(self, other):
-        for t in ResourceTypes:
-            if isinstance(self.location, t):
-                match t:
-                    case pathlib.Path:
-                        for t in ResourceTypes:
-                            if isinstance(other.location, t):
-                                match t:
-                                    case pathlib.Path:
-                                        return self.location.lstat().st_mtime <= other.location.lstat().st_mtime
+        if isinstance(self.location, pathlib.Path) and isinstance(other.location, pathlib.Path):
+            return self.location.lstat().st_mtime <= other.location.lstat().st_mtime
+        return NotImplemented
     def __lt__(self, other):
-        for t in ResourceTypes:
-            if isinstance(self.location, t):
-                match t:
-                    case pathlib.Path:
-                        for t in ResourceTypes:
-                            if isinstance(other.location, t):
-                                match t:
-                                    case pathlib.Path:
-                                        return self.location.lstat().st_mtime < other.location.lstat().st_mtime
+        if isinstance(self.location, pathlib.Path) and isinstance(other.location, pathlib.Path):
+            return self.location.lstat().st_mtime < other.location.lstat().st_mtime
+        return NotImplemented
 
 class Propagator:
     def __init__(self):
@@ -121,19 +106,13 @@ class Propagator:
         self.history = []
     @staticmethod
     def valid_dependency(requirement, target):
-        for t in ResourceTypes:
-            if isinstance(requirement.location, t):
-                match t:
-                    case pathlib.Path:
-                        for t in ResourceTypes:
-                            if isinstance(target.location, t):
-                                match t:
-                                    case pathlib.Path:
-                                        return True
+        if isinstance(requirement.location, pathlib.Path) and isinstance(target.location, pathlib.Path):
+            return True
         return False
     def add(self, requirement, target):
         if not Propagator.valid_dependency(requirement, target):
             raise Error(ErrorTypes.NOT_VALID_DEPENDENCY, requirement, target)
+
         for i in (requirement, target):
             if i.identifier in self.resources:
                 if not self.resources[i.identifier] == i:
