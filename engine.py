@@ -1,5 +1,6 @@
 import networkx as nx
 import pathlib # https://realpython.com/python-pathlib/
+import matplotlib.pyplot as plt
 from abc import ABC, abstractmethod
 from . import conf
 from alive_progress import alive_bar
@@ -62,6 +63,13 @@ class FileLocation(Location):
         return self.path.exists()
     def get_state_token(self) -> float:
         return self.path.lstat().st_mtime if self.exists() else -1.0
+    def __eq__(self, other):
+        if not isinstance(other, FileLocation):
+            return NotImplemented
+        return self.path == other.path
+    def __hash__(self):
+        return hash(self.path)
+
 
 class Resource:
     def __init__(self, location: Location, identifier, builder, updater):
@@ -89,10 +97,8 @@ class Resource:
     def __le__(self, other):
         # Compare based on the state token provided by the Location object
         return self.location.get_state_token() <= other.location.get_state_token()
-        return NotImplemented
     def __lt__(self, other):
         return self.location.get_state_token() < other.location.get_state_token()
-        return NotImplemented
 
 class Propagator:
     def __init__(self):
@@ -124,13 +130,6 @@ class Propagator:
 
         self.graph.add_edges_from([(requirement.identifier, target.identifier)])
 
-    def show(self):
-        pos = nx.spring_layout(self.graph)
-        nx.draw_networkx_nodes(self.graph, pos, cmap=plt.get_cmap('jet'), node_size = 500)
-        nx.draw_networkx_labels(self.graph, pos)
-        nx.draw_networkx_edges(self.graph, pos, arrows=True)
-        plt.show()
-
     def run(self, block_propagation_level: PropagationLevel = PropagationLevel.COLLECT_ALL_ERRORS):
         self.events = []
         self.errors = []
@@ -143,9 +142,9 @@ class Propagator:
                 target = self.resources[identifier]
                 requirement_identifiers = list(self.graph.predecessors(identifier))
                 requirements = {}
-                all_requirements_found = True
-                for identifier in requirement_identifiers:
-                    requirement = self.resources[identifier]
+                all_requirements_found = True # Flag to track if all requirements exist
+                for req_id in requirement_identifiers:
+                    requirement = self.resources[req_id]
                     if not requirement.exists():
                         self.errors.append(Error(ErrorTypes.NOT_FOUND_REQUIREMENT, requirement, target)) # Requirement missing
                         self.history.append(self.errors[-1])
@@ -186,14 +185,14 @@ class Propagator:
                     launched_update = False
                     failed_update = False
                     update_details = None # Initialize update_details
-                    for identifier in requirement_identifiers: # Iterate through requirements to check if any are newer
-                        requirement = self.resources[identifier]
+                    for req_id in requirement_identifiers: # Iterate through requirements to check if any are newer
+                        requirement = self.resources[req_id]
                         if target <= requirement: # This requirement may be more recent than target
                             try:
                                 launched_update = True
                                 self.events.append(Event(EventTypes.LAUNCHED_UPDATE, target))
                                 self.history.append(self.events[-1])
-                                details = target.update(requirements)
+                                update_details = target.update(requirements)
                             except Exception as e:
                                 error = Error(ErrorTypes.FAILED_UPDATE, target)
                                 error.add_external_details(e)
@@ -203,8 +202,8 @@ class Propagator:
                             break # Stop checking requirements if one triggers an update attempt
                     if not failed_update:
                         not_performed_update = False
-                        for identifier in requirement_identifiers: # Re-check if target is still older after update attempt
-                            requirement = self.resources[identifier]
+                        for req_id in requirement_identifiers: # Re-check if target is still older after update attempt
+                            requirement = self.resources[req_id]
                             if target < requirement: # Target is still older than this requirement
                                 self.errors.append(Error(ErrorTypes.NOT_PERFORMED_UPDATE, target))
                                 self.history.append(self.errors[-1])
@@ -225,5 +224,13 @@ class Propagator:
         errs = len(self.errors)
         if errs > 0:
             raise Error(ErrorTypes.PROPAGATION, errs)
+
+    def show(self):
+        pos = nx.spring_layout(self.graph)
+        nx.draw_networkx_nodes(self.graph, pos, cmap=plt.get_cmap('jet'), node_size = 500)
+        nx.draw_networkx_labels(self.graph, pos)
+        nx.draw_networkx_edges(self.graph, pos, arrows=True)
+        plt.show()
+
 def void_function(location, requirements):
     pass
