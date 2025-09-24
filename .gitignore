@@ -11,5 +11,5 @@ obj/
 bin/
 
 # Test artifacts
-propagator/test/*
-!propagator/test/*.py
+test/*
+!test/*.py
