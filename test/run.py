@@ -5,7 +5,7 @@ import sys
 # Add the project root to the Python path to ensure the propagator module can be found
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 sys.path.insert(0, project_root)
-import propagator.engine as prop
+import propagator as prop
 
 this_path = os.path.dirname(os.path.realpath(__file__))
 

@@ -19,7 +19,7 @@ Think of it as a Python-native alternative to `make`, designed for orchestrating
 ## Core Concepts
 
 1.  **Resource**: The fundamental unit in the system. A resource represents an entity (like a file) that can be created or updated. It has:
-    -   `location`: A handle to the resource (e.g., a `pathlib.Path`).
+    -   `location`: A `Location` object that points to the resource and provides state information (e.g., `FileLocation` which wraps a `pathlib.Path`).
     -   `identifier`: A unique `str` name for the resource.
     -   `builder`: A Python function to create the resource if it doesn't exist.
     -   `updater`: A Python function to update the resource if its dependencies have changed.
@@ -45,7 +45,7 @@ Here is a simple example of compiling two `.c` files into object files and then 
 ```python
 import pathlib
 import subprocess
-from propagator.engine import Propagator, Resource, FileLocation, void_function
+from propagator import Propagator, Resource, FileLocation, void_function
 
 # Helper function to run shell commands
 def run_command(command):
@@ -144,7 +144,7 @@ The script will first build all targets. If you run it again, it will do nothing
 
 ## API Reference
 
-### `propagator.engine.Propagator`
+### `propagator.Propagator`
 
 -   `add(requirement: Resource, target: Resource)`: Adds a dependency to the graph.
 -   `run(block_propagation_level: PropagationLevel = PropagationLevel.COLLECT_ALL_ERRORS, max_workers: int = None)`: Executes the build/update process.
