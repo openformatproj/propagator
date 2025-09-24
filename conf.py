@@ -1,4 +1,4 @@
-from .engine import EventTypes, ErrorTypes
+from .types import EventTypes, ErrorTypes
 
 EVENT_MESSAGES = {
     EventTypes.LAUNCHED_BUILD: "build of '{resource.identifier}' launched",
