@@ -127,8 +127,17 @@ except Exception as e:
 ### Running the Example
 
 1.  Save the code above as `example.py`.
-2.  Place `engine.py` in a `propagator` subdirectory.
-3.  Run `python example.py`.
+2.  Ensure the `propagator` package directory is in the same directory as `example.py`. The structure should look like this:
+    ```
+    my_project/
+    ├── example.py
+    └── propagator/
+        ├── __init__.py
+        ├── engine.py
+        ├── conf.py
+        └── types.py
+    ```
+3.  From your terminal, inside the `my_project` directory, run the script: `python example.py`.
 
 The script will first build all targets. If you run it again, it will do nothing. If you `touch src/lib.c` and run it again, it will intelligently recompile `lib.o` and relink `program`, but it will not recompile `main.o`.
 
