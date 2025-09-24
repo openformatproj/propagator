@@ -17,6 +17,13 @@ This file lists potential features and improvements for the `propagator` engine.
         -   Use Python's `concurrent.futures.ThreadPoolExecutor` or `ProcessPoolExecutor` to process nodes that do not depend on each other in parallel.
         -   This would require careful management of task scheduling to ensure dependencies are met before a task is submitted to the pool.
 
+-   [ ] **Distributed Execution Model**
+    -   **Description:** Extend the parallel execution model to support distributed systems. This would allow build/update tasks to be executed across multiple machines, enabling much larger-scale processing.
+    -   **Implementation:**
+        -   Abstract the execution backend. The current `ThreadPoolExecutor` would become the default local backend.
+        -   Investigate and add new backends using libraries like `Dask`, `Ray`, or a custom RPC/queue-based system (e.g., Celery with RabbitMQ/Redis).
+        -   This would likely require making `Resource` and `Location` objects serializable or finding a way to reference them across a distributed network.
+
 -   [ ] **"Dry Run" Mode**
     -   **Description:** Add a `dry_run=True` flag to the `run()` method to simulate a run without executing the actual `build` or `update` functions.
     -   **Implementation:**
