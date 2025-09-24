@@ -1,5 +1,10 @@
 import pathlib
 import os
+import sys
+
+# Add the project root to the Python path to ensure the propagator module can be found
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, project_root)
 import propagator.engine as prop
 
 this_path = os.path.dirname(os.path.realpath(__file__))
@@ -37,9 +42,7 @@ if all_resources_available:
     history = propagator.history
     if (len(history) > 0):
         print('History:\n')
-        i = 1
-        for h in history:
+        for i, h in enumerate(history, 1):
             print(f'\t{i}) {type(h).__name__}: {h.details}')
-            i = i+1
         print('\n')
     # propagator.show() Show a graph of dependencies
