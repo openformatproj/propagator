@@ -3,6 +3,7 @@ import pathlib # https://realpython.com/python-pathlib/
 import matplotlib.pyplot as plt
 from enum import IntEnum
 from alive_progress import alive_bar
+from . import conf
 
 class EventTypes(IntEnum):
     LAUNCHED_BUILD = 0
@@ -12,16 +13,10 @@ class EventTypes(IntEnum):
 
 class Event:
     def __init__(self, t, *args):
-        match t:
-            case EventTypes.LAUNCHED_BUILD:
-                self.details = f"build of '{args[0].identifier}' launched"
-            case EventTypes.PERFORMED_BUILD:
-                self.details = f"build of '{args[0].identifier}' performed"
-            case EventTypes.LAUNCHED_UPDATE:
-                self.details = f"update of '{args[0].identifier}' launched"
-            case EventTypes.PERFORMED_UPDATE:
-                self.details = f"update of '{args[0].identifier}' performed"
+        message_template = conf.EVENT_MESSAGES[t]
+        self.details = message_template.format(resource=args[0])
         self.external_details = None
+
     def add_external_details(self, details):
         self.details += f' -> {details}'
         self.external_details = details
@@ -41,29 +36,30 @@ class ErrorTypes(IntEnum):
 
 class Error(Exception):
     def __init__(self, t, *args):
+        message_template = conf.ERROR_MESSAGES[t]
         match t:
-            case ErrorTypes.BAD_PATH:
-                self.details = "bad path"
+            case ErrorTypes.BAD_PATH | ErrorTypes.CYCLIC_GRAPH:
+                self.details = message_template
             case ErrorTypes.NOT_VALID_DEPENDENCY:
-                self.details = f"dependency between '{args[0].identifier}' and '{args[1].identifier}' is not valid"
+                self.details = message_template.format(requirement=args[0], target=args[1])
             case ErrorTypes.RESOURCES_IDENTIFIERS:
-                self.details = f"more resources have the same identifier '{args[0].identifier}'"
+                self.details = message_template.format(resource=args[0])
             case ErrorTypes.IDENTIFIERS_LOCATION:
-                self.details = f"resources '{args[0].identifier}' and '{args[1].identifier}' point to the same location '{args[0].location}'"
-            case ErrorTypes.CYCLIC_GRAPH:
-                self.details = "found cyclic dependencies"
-            case ErrorTypes.FAILED_BUILD:
-                self.details = f"build of '{args[0].identifier}' failed, build function raised an exception"
-            case ErrorTypes.NOT_PERFORMED_BUILD:
-                self.details = f"build of '{args[0].identifier}' hasn't been really performed (build function hasn't builded anything)"
+                self.details = message_template.format(resource1=args[0], resource2=args[1])
+            case (
+                ErrorTypes.FAILED_BUILD
+                | ErrorTypes.NOT_PERFORMED_BUILD
+                | ErrorTypes.FAILED_UPDATE
+                | ErrorTypes.NOT_PERFORMED_UPDATE
+            ):
+                self.details = message_template.format(resource=args[0])
             case ErrorTypes.NOT_FOUND_REQUIREMENT:
-                self.details = f"requirement '{args[0].identifier}' for '{args[1].identifier}' doesn't exist, update is not possible"
-            case ErrorTypes.FAILED_UPDATE:
-                self.details = f"update of '{args[0].identifier}' failed, update function raised an exception"
-            case ErrorTypes.NOT_PERFORMED_UPDATE:
-                self.details = f"update of '{args[0].identifier}' hasn't been really performed (update function hasn't updated anything)"
-                self.details = f"'{args[0]}' errors have been detected during propagation"
+                self.details = message_template.format(requirement=args[0], target=args[1])
+            case ErrorTypes.PROPAGATION:
+                self.details = message_template.format(count=args[0])
+        super().__init__(self.details)
         self.external_details = None
+
     def add_external_details(self, details):
         self.details += f' -> {details}'
         self.external_details = details
