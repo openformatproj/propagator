@@ -2,6 +2,7 @@ import networkx as nx
 import pathlib # https://realpython.com/python-pathlib/
 import matplotlib.pyplot as plt
 from enum import IntEnum
+from abc import ABC, abstractmethod
 from alive_progress import alive_bar
 from . import conf
 
@@ -69,16 +70,30 @@ class Error(Exception):
         self.details += f' -> {details}'
         self.external_details = details
 
+class Location(ABC):
+    @abstractmethod
+    def exists(self) -> bool:
+        pass
+
+    @abstractmethod
+    def get_state_token(self) -> any:
+        """Returns a comparable token representing the state (e.g., timestamp, hash)."""
+        pass
+
+class FileLocation(Location):
+    def __init__(self, path: pathlib.Path):
+        self.path = path
+    def exists(self) -> bool:
+        return self.path.exists()
+    def get_state_token(self) -> float:
+        return self.path.lstat().st_mtime if self.exists() else -1.0
+
 class Resource:
-    def __init__(self, location, identifier, builder, updater):
+    def __init__(self, location: Location, identifier, builder, updater):
         self.location = location
         self.identifier = identifier
         self.builder = builder
         self.updater = updater
-        if not isinstance(self.location, pathlib.Path):
-            raise TypeError(f"Resource location must be a pathlib.Path, got {type(self.location)}")
-        # The original TODO about BAD_PATH is partially addressed by the TypeError.
-        # A full check for creatable path is complex and often deferred to the builder/updater.
 
     def __eq__(self, other):
         if not isinstance(other, Resource):
@@ -91,20 +106,17 @@ class Resource:
         return hash((self.identifier, self.location, self.builder, self.updater))
 
     def exists(self):
-        if isinstance(self.location, pathlib.Path):
-            return self.location.exists()
-        return False # Or handle other types
+        return self.location.exists()
     def build(self, requirements):
         return self.builder(self.location, requirements)
     def update(self, requirements):
         return self.updater(self.location, requirements)
     def __le__(self, other):
-        if isinstance(self.location, pathlib.Path) and isinstance(other.location, pathlib.Path):
-            return self.location.lstat().st_mtime <= other.location.lstat().st_mtime
+        # Compare based on the state token provided by the Location object
+        return self.location.get_state_token() <= other.location.get_state_token()
         return NotImplemented
     def __lt__(self, other):
-        if isinstance(self.location, pathlib.Path) and isinstance(other.location, pathlib.Path):
-            return self.location.lstat().st_mtime < other.location.lstat().st_mtime
+        return self.location.get_state_token() < other.location.get_state_token()
         return NotImplemented
 
 class Propagator:
@@ -116,9 +128,7 @@ class Propagator:
         self.history = []
     @staticmethod
     def valid_dependency(requirement, target):
-        if isinstance(requirement.location, pathlib.Path) and isinstance(target.location, pathlib.Path):
-            return True
-        return False
+        return isinstance(requirement.location, Location) and isinstance(target.location, Location)
     def add(self, requirement, target):
         if not Propagator.valid_dependency(requirement, target):
             raise Error(ErrorTypes.NOT_VALID_DEPENDENCY, requirement, target)

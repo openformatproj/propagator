@@ -19,7 +19,7 @@ Think of it as a Python-native alternative to `make`, designed for orchestrating
 
 1.  **Resource**: The fundamental unit in the system. A resource represents an entity (like a file) that can be created or updated. It has:
     -   `location`: A handle to the resource (e.g., a `pathlib.Path`).
-    -   `identifier`: A unique string name for the resource.
+    -   `identifier`: A unique `str` name for the resource.
     -   `builder`: A Python function to create the resource if it doesn't exist.
     -   `updater`: A Python function to update the resource if its dependencies have changed.
 
@@ -44,7 +44,7 @@ Here is a simple example of compiling two `.c` files into object files and then 
 ```python
 import pathlib
 import subprocess
-from propagator.engine import Propagator, Resource, void_function
+from propagator.engine import Propagator, Resource, FileLocation, void_function
 
 # Helper function to run shell commands
 def run_command(command):
@@ -56,15 +56,15 @@ def run_command(command):
 # Builder for compiling a .c file to a .o file
 def compile_c_file(location, requirements):
     # requirements is a dict of {'identifier': Resource}
-    source_file = list(requirements.values())[0].location
-    command = ["gcc", "-c", str(source_file), "-o", str(location)]
+    source_file = list(requirements.values())[0].location.path
+    command = ["gcc", "-c", str(source_file), "-o", str(location.path)]
     run_command(command)
     return f"Compiled {source_file.name}"
 
 # Builder for linking .o files into an executable
 def link_objects(location, requirements):
-    object_files = [str(r.location) for r in requirements.values()]
-    command = ["gcc"] + object_files + ["-o", str(location)]
+    object_files = [str(r.location.path) for r in requirements.values()]
+    command = ["gcc"] + object_files + ["-o", str(location.path)]
     run_command(command)
     return f"Linked {len(object_files)} object(s)"
 
@@ -84,15 +84,15 @@ BIN_DIR.mkdir(exist_ok=True)
 (SRC_DIR / "lib.c").write_text('void lib_func() {}')
 
 # Source file resources (they have no builder/updater)
-main_c = Resource(SRC_DIR / "main.c", "main.c", void_function, void_function)
-lib_c = Resource(SRC_DIR / "lib.c", "lib.c", void_function, void_function)
+main_c = Resource(FileLocation(SRC_DIR / "main.c"), "main.c", void_function, void_function)
+lib_c = Resource(FileLocation(SRC_DIR / "lib.c"), "lib.c", void_function, void_function)
 
 # Object file resources
-main_o = Resource(OBJ_DIR / "main.o", "main.o", compile_c_file, compile_c_file)
-lib_o = Resource(OBJ_DIR / "lib.o", "lib.o", compile_c_file, compile_c_file)
+main_o = Resource(FileLocation(OBJ_DIR / "main.o"), "main.o", compile_c_file, compile_c_file)
+lib_o = Resource(FileLocation(OBJ_DIR / "lib.o"), "lib.o", compile_c_file, compile_c_file)
 
 # Executable resource
-program = Resource(BIN_DIR / "program", "program", link_objects, link_objects)
+program = Resource(FileLocation(BIN_DIR / "program"), "program", link_objects, link_objects)
 
 # --- 3. Set up the Propagator and Add Dependencies ---
 
