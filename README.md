@@ -9,6 +9,7 @@ Think of it as a Python-native alternative to `make`, designed for orchestrating
 -   **Dependency Management**: Define dependencies between resources to create a clear and robust execution graph.
    -   **Topological Execution**: Resources are processed in a topologically sorted order, ensuring dependencies are met before a resource is built or updated.
    -   **Automatic Update Propagation**: The engine automatically detects if a dependency is newer than a target resource and triggers an update.
+   -   **Parallel Execution**: Automatically executes independent build/update tasks in parallel for significant speed improvements on multi-core systems.
    -   **Cyclic Dependency Detection**: Automatically detects and reports cyclic dependencies to prevent infinite loops.
    -   **Custom Build/Update Logic**: Provide your own Python functions for building and updating each resource, giving you full control over the process.
    -   **Error Handling**: Captures exceptions during execution and provides detailed error reports. Propagation can be configured to stop on first error or to collect all errors.
@@ -146,10 +147,12 @@ The script will first build all targets. If you run it again, it will do nothing
 ### `propagator.engine.Propagator`
 
 -   `add(requirement: Resource, target: Resource)`: Adds a dependency to the graph.
--   `run(block_propagation_level: PropagationLevel = PropagationLevel.COLLECT_ALL_ERRORS)`: Executes the build/update process.
-    -   `PropagationLevel.COLLECT_ALL_ERRORS` (0): Never stops on error; collects all errors.
-    -   `PropagationLevel.STOP_ON_CRITICAL_ERROR` (1): Stops if a build/update fails or a requirement is missing.
-    -   `PropagationLevel.STOP_ON_ANY_ERROR` (2): Stops on any error, including "not performed" warnings.
+-   `run(block_propagation_level: PropagationLevel = PropagationLevel.COLLECT_ALL_ERRORS, max_workers: int = None)`: Executes the build/update process.
+    -   `block_propagation_level`: Controls error handling behavior.
+        -   `PropagationLevel.COLLECT_ALL_ERRORS` (0): Never stops on error; collects all errors.
+        -   `PropagationLevel.STOP_ON_CRITICAL_ERROR` (1): Stops if a build/update fails or a requirement is missing.
+        -   `PropagationLevel.STOP_ON_ANY_ERROR` (2): Stops on any error, including "not performed" warnings.
+    -   `max_workers`: The maximum number of threads to use for parallel execution. Defaults to the system's default for `ThreadPoolExecutor`.
 -   `show()`: Displays a plot of the dependency graph.
 -   `history`: A list of `Event` and `Error` objects in chronological order of occurrence.
 -   `events`: A list of successful `Event` objects.

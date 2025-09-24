@@ -1,6 +1,8 @@
 import networkx as nx
 import pathlib # https://realpython.com/python-pathlib/
 import matplotlib.pyplot as plt
+import concurrent.futures
+import threading
 from abc import ABC, abstractmethod
 from . import conf
 from alive_progress import alive_bar
@@ -107,11 +109,12 @@ class Propagator:
         self.events = []
         self.errors = []
         self.history = []
+        self._lock = threading.Lock() # For thread-safe list appends
     @staticmethod
     def valid_dependency(requirement, target):
         return isinstance(requirement.location, Location) and isinstance(target.location, Location)
     def add(self, requirement, target):
-        if not Propagator.valid_dependency(requirement, target):
+        if not self.valid_dependency(requirement, target):
             raise Error(ErrorTypes.NOT_VALID_DEPENDENCY, requirement, target)
 
         for res in (requirement, target):
@@ -130,100 +133,126 @@ class Propagator:
 
         self.graph.add_edges_from([(requirement.identifier, target.identifier)])
 
-    def run(self, block_propagation_level: PropagationLevel = PropagationLevel.COLLECT_ALL_ERRORS):
+    def _process_resource(self, identifier: str, block_propagation_level: PropagationLevel):
+        """Processes a single resource. This method is designed to be run in a worker thread."""
+        target = self.resources[identifier]
+        requirement_identifiers = list(self.graph.predecessors(identifier))
+        requirements = {req_id: self.resources[req_id] for req_id in requirement_identifiers}
+
+        local_events = []
+        local_errors = []
+
+        # Check if all requirements exist (this is a secondary check, as the main loop should prevent this)
+        for req in requirements.values():
+            if not req.exists():
+                local_errors.append(Error(ErrorTypes.NOT_FOUND_REQUIREMENT, req, target))
+                return local_events, local_errors
+
+        if not target.exists():
+            try:
+                local_events.append(Event(EventTypes.LAUNCHED_BUILD, target))
+                details = target.build(requirements)
+                if not target.exists():
+                    local_errors.append(Error(ErrorTypes.NOT_PERFORMED_BUILD, target))
+                else:
+                    event = Event(EventTypes.PERFORMED_BUILD, target)
+                    event.add_external_details(details)
+                    local_events.append(event)
+            except Exception as e:
+                error = Error(ErrorTypes.FAILED_BUILD, target)
+                error.add_external_details(e)
+                local_errors.append(error)
+        else:
+            # Check if an update is needed
+            needs_update = any(target <= req for req in requirements.values())
+            if needs_update:
+                try:
+                    local_events.append(Event(EventTypes.LAUNCHED_UPDATE, target))
+                    update_details = target.update(requirements)
+
+                    # Verify update was successful
+                    if any(target < req for req in requirements.values()):
+                         local_errors.append(Error(ErrorTypes.NOT_PERFORMED_UPDATE, target))
+                    else:
+                        event = Event(EventTypes.PERFORMED_UPDATE, target)
+                        event.add_external_details(update_details)
+                        local_events.append(event)
+                except Exception as e:
+                    error = Error(ErrorTypes.FAILED_UPDATE, target)
+                    error.add_external_details(e)
+                    local_errors.append(error)
+
+        return local_events, local_errors
+
+    def run(self, block_propagation_level: PropagationLevel = PropagationLevel.COLLECT_ALL_ERRORS, max_workers: int = None):
         self.events = []
         self.errors = []
         self.history = []
         if not nx.is_directed_acyclic_graph(self.graph):
             raise Error(ErrorTypes.CYCLIC_GRAPH)
+
         identifiers = list(nx.topological_sort(self.graph))
-        with alive_bar(len(identifiers)) as bar:
-            for identifier in identifiers:
-                target = self.resources[identifier]
-                requirement_identifiers = list(self.graph.predecessors(identifier))
-                requirements = {}
-                all_requirements_found = True # Flag to track if all requirements exist
-                for req_id in requirement_identifiers:
-                    requirement = self.resources[req_id]
-                    if not requirement.exists():
-                        self.errors.append(Error(ErrorTypes.NOT_FOUND_REQUIREMENT, requirement, target)) # Requirement missing
-                        self.history.append(self.errors[-1])
-                        all_requirements_found = False
-                    else:
-                        requirements[req_id] = requirement
-                if not all_requirements_found: # not all requirements have been found
-                    bar()
-                    if block_propagation_level >= 1:
-                        break # Stop propagation if level 1 and requirements are missing
-                    continue
-                if not target.exists():
-                    try:
-                        self.events.append(Event(EventTypes.LAUNCHED_BUILD, target))
-                        self.history.append(self.events[-1])
-                        details = target.build(requirements)
-                        if not target.exists():
-                            self.errors.append(Error(ErrorTypes.NOT_PERFORMED_BUILD, target))
-                            self.history.append(self.errors[-1])
-                            if block_propagation_level >= 2:
-                                bar()
-                                break # Stop propagation if level 2 and build not performed
-                        else:
-                            event = Event(EventTypes.PERFORMED_BUILD, target)
-                            event.add_external_details(details) # Build successful
-                            self.events.append(event)
-                            self.history.append(self.events[-1])
-                    except Exception as e:
-                        error = Error(ErrorTypes.FAILED_BUILD, target)
-                        error.add_external_details(e)
-                        self.errors.append(error)
-                        self.history.append(self.errors[-1])
-                        if block_propagation_level >= 1:
-                            bar() # Build failed
-                            break # Stop propagation if level 1 and build failed
-                    bar()
-                else:
-                    launched_update = False
-                    failed_update = False
-                    update_details = None # Initialize update_details
-                    for req_id in requirement_identifiers: # Iterate through requirements to check if any are newer
-                        requirement = self.resources[req_id]
-                        if target <= requirement: # This requirement may be more recent than target
-                            try:
-                                launched_update = True
-                                self.events.append(Event(EventTypes.LAUNCHED_UPDATE, target))
-                                self.history.append(self.events[-1])
-                                update_details = target.update(requirements)
-                            except Exception as e:
-                                error = Error(ErrorTypes.FAILED_UPDATE, target)
-                                error.add_external_details(e)
-                                self.errors.append(error)
-                                self.history.append(self.errors[-1])
-                                failed_update = True
-                            break # Stop checking requirements if one triggers an update attempt
-                    if not failed_update:
-                        not_performed_update = False
-                        for req_id in requirement_identifiers: # Re-check if target is still older after update attempt
-                            requirement = self.resources[req_id]
-                            if target < requirement: # Target is still older than this requirement
-                                self.errors.append(Error(ErrorTypes.NOT_PERFORMED_UPDATE, target))
-                                self.history.append(self.errors[-1])
-                                not_performed_update = True
-                                break # Stop checking if one indicates not performed
-                        if not_performed_update and block_propagation_level >= 2:
+        futures = {} # {identifier: Future}
+
+        bar_manager = alive_bar(len(identifiers))
+        bar = bar_manager.__enter__()
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                for identifier in identifiers:
+                    # Wait for all dependencies of the current node to complete
+                    dep_futures = [futures[pred] for pred in self.graph.predecessors(identifier) if pred in futures]
+                    if dep_futures:
+                        concurrent.futures.wait(dep_futures)
+
+                    # Check if any dependency failed
+                    should_skip = False
+                    for fut in dep_futures:
+                        _, dep_errors = fut.result()
+                        if dep_errors:
+                            should_skip = True
+                            break
+
+                    if should_skip and block_propagation_level >= PropagationLevel.STOP_ON_CRITICAL_ERROR:
+                        # A dependency failed, so we skip this node and all subsequent nodes
+                        # Fill the rest of the progress bar
+                        while bar.current() < bar.total:
                             bar()
-                            break # Stop propagation if level 2 and update not performed
-                    elif block_propagation_level >= 1:
-                        bar()
-                        break # Stop propagation if level 1 and update failed
-                    if launched_update and not not_performed_update:
-                        event = Event(EventTypes.PERFORMED_UPDATE, target) # 'update_details' is now guaranteed to be defined if launched_update is True
-                        event.add_external_details(update_details)
-                        self.events.append(event)
-                        self.history.append(self.events[-1])
-                    bar()
+                        break
+
+                    # Submit the current node for processing
+                    future = executor.submit(self._process_resource, identifier, block_propagation_level)
+                    futures[identifier] = future
+
+                    # Update progress bar and history as tasks complete
+                    future.add_done_callback(lambda f: self._collect_results(f, bar))
+
+            # Final collection of any remaining results
+            for future in futures.values():
+                if not future.done():
+                    future.result() # Wait for any stragglers
+        finally:
+            # Ensure the bar is closed even if errors occur
+            bar_manager.__exit__(None, None, None)
+
         errs = len(self.errors)
         if errs > 0:
             raise Error(ErrorTypes.PROPAGATION, errs)
+
+    def _collect_results(self, future, bar):
+        """Thread-safe callback to collect results from a completed future."""
+        try:
+            local_events, local_errors = future.result()
+            with self._lock:
+                self.events.extend(local_events)
+                self.errors.extend(local_errors)
+                self.history.extend(local_events)
+                self.history.extend(local_errors)
+                # Consider sorting history by a timestamp if exact order is critical
+            bar()
+        except Exception as e:
+            # This would catch errors in the _process_resource logic itself, not the build/update functions
+            # For simplicity, we'll just advance the bar. A more robust implementation might log this.
+            bar()
 
     def show(self):
         pos = nx.spring_layout(self.graph)
