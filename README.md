@@ -35,7 +35,7 @@ The engine relies on a few external libraries. You can install them using pip:
 pip install networkx matplotlib alive-progress
 ```
 
-Then, simply include the `propagator/engine.py` file in your project.
+Then, simply place the `propagator` directory within your project's source tree.
 
 ## Quick Start
 
