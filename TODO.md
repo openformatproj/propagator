@@ -30,3 +30,13 @@ This file lists potential features and improvements for the `propagator` engine.
 
 -   [ ] **Plugin System for `Location` Types**
     -   **Description:** To make the engine even more extensible, create a simple plugin system where users can register their own custom `Location` subclasses (e.g., for S3, databases, web APIs) without modifying the core engine code.
+
+## Testing
+
+-   [ ] **Create a Comprehensive Unit Test Suite**
+    -   **Description:** The current `test/run.py` script is a good integration test, but a formal unit test suite using a framework like `pytest` would improve reliability and make refactoring safer.
+    -   **Implementation:**
+        -   Create tests for the `Propagator.add` method to verify correct detection of identifier and location conflicts.
+        -   Test the `run` method's behavior with different `PropagationLevel` settings.
+        -   Test the `Resource` and `Location` classes' methods individually.
+        -   Create tests for error conditions, such as cyclic graphs and failing build/update functions.
