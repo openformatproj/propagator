@@ -10,6 +10,7 @@ from .types import EventTypes, PropagationLevel, ErrorTypes
 
 class Event:
     def __init__(self, t, *args):
+        self.t = t # Store the event type
         message_template = conf.EVENT_MESSAGES[t]
         self.details = message_template.format(resource=args[0])
         self.external_details = None
@@ -20,6 +21,7 @@ class Event:
 
 class Error(Exception):
     def __init__(self, t, *args):
+        self.t = t # Store the error type
         message_template = conf.ERROR_MESSAGES[t]
         match t:
             case ErrorTypes.BAD_PATH | ErrorTypes.CYCLIC_GRAPH:
@@ -204,6 +206,16 @@ class Propagator:
                     if dep_futures:
                         concurrent.futures.wait(dep_futures)
 
+                    # Pre-check: ensure all direct file requirements for the current node exist before submission.
+                    all_reqs_exist = True
+                    for pred_id in self.graph.predecessors(identifier):
+                        if not self.resources[pred_id].exists():
+                            error = Error(ErrorTypes.NOT_FOUND_REQUIREMENT, self.resources[pred_id], self.resources[identifier])
+                            with self._lock:
+                                self.errors.append(error)
+                                self.history.append(error)
+                            all_reqs_exist = False
+                    
                     # Check if any dependency failed
                     should_skip = False
                     for fut in dep_futures:
@@ -212,14 +224,22 @@ class Propagator:
                             should_skip = True
                             break
 
+                    # Combine checks: skip if a dependency failed OR a direct requirement is missing
+                    should_skip = should_skip or not all_reqs_exist
+
                     if should_skip and block_propagation_level >= PropagationLevel.STOP_ON_CRITICAL_ERROR:
                         # A dependency failed, so we skip this node and all subsequent nodes
                         # Fill the rest of the progress bar
-                        while bar.current() < bar.total:
+                        while bar.current < len(identifiers):
                             bar()
                         break
 
                     # Submit the current node for processing
+                    if should_skip:
+                        # If we are just collecting errors, we must still advance the bar.
+                        bar()
+                        continue
+
                     future = executor.submit(self._process_resource, identifier, block_propagation_level)
                     futures[identifier] = future
 
