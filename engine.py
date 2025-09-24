@@ -150,7 +150,7 @@ class Propagator:
                         self.history.append(self.errors[-1])
                         all_requirements_found = False
                     else:
-                        requirements[identifier] = requirement
+                        requirements[req_id] = requirement
                 if not all_requirements_found: # not all requirements have been found
                     bar()
                     if block_propagation_level >= 1:
