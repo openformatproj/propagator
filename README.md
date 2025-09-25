@@ -1,3 +1,16 @@
+- [Propagator](#propagator)
+  - [Features](#features)
+  - [Core Concepts](#core-concepts)
+  - [Installation](#installation)
+  - [Quick Start](#quick-start)
+    - [Running the Example](#running-the-example)
+  - [Extending Propagator](#extending-propagator)
+    - [Custom Location Types](#custom-location-types)
+  - [Testing](#testing)
+  - [API Reference](#api-reference)
+    - [`propagator.Propagator`](#propagatorpropagator)
+  - [Future Enhancements](#future-enhancements)
+
 # Propagator
 
 **Propagator** is a lightweight, flexible, and dependency-aware build and update engine for Python. It allows you to define a directed acyclic graph (DAG) of resources, where each resource can be a file or any other entity, and specify how to build or update them based on their dependencies.
@@ -21,8 +34,8 @@ Think of it as a Python-native alternative to `make`, designed for orchestrating
 1.  **Resource**: The fundamental unit in the system. A resource represents an entity (like a file) that can be created or updated. It has:
     -   `location`: A `Location` object that points to the resource and provides state information (e.g., `FileLocation` which wraps a `pathlib.Path`).
     -   `identifier`: A unique `str` name for the resource.
-    -   `builder`: A Python function to create the resource if it doesn't exist.
-    -   `updater`: A Python function to update the resource if its dependencies have changed.
+    -   `builder`: A Python function to create the resource if it doesn't exist. Use `propagator.void_function` if no build action is needed (e.g., for source files that are only requirements).
+    -   `updater`: A Python function to update the resource if its dependencies have changed. Use `propagator.void_function` if no update action is needed (e.g., if the resource is always rebuilt or never changes).
 
 2.  **Dependency**: A relationship between two resources. If `Resource B` depends on `Resource A`, it means `A` is a *requirement* for `B`. `B` cannot be built or updated until `A` is available and up-to-date.
 
@@ -243,11 +256,22 @@ Pytest will automatically discover and run all the tests in the `test/` director
 -   `add(requirement: Resource, target: Resource)`: Adds a dependency to the graph.
 -   `run(block_propagation_level: PropagationLevel = PropagationLevel.COLLECT_ALL_ERRORS, max_workers: int = None)`: Executes the build/update process.
     -   `block_propagation_level`: Controls error handling behavior.
-        -   `PropagationLevel.COLLECT_ALL_ERRORS` (0): Never stops on error; collects all errors.
-        -   `PropagationLevel.STOP_ON_CRITICAL_ERROR` (1): Stops if a build/update fails or a requirement is missing.
-        -   `PropagationLevel.STOP_ON_ANY_ERROR` (2): Stops on any error, including "not performed" warnings.
+        -   `PropagationLevel.COLLECT_ALL_ERRORS` (0): The engine attempts to process as many resources as possible, collecting all errors (e.g., `NOT_FOUND_REQUIREMENT`, `FAILED_BUILD`, `NOT_PERFORMED_BUILD`/`UPDATE`). The `run()` method will raise a single `Error` exception at the end if any errors occurred.
+        -   `PropagationLevel.STOP_ON_CRITICAL_ERROR` (1): Stops propagation immediately upon encountering a critical error, such as a `NOT_FOUND_REQUIREMENT` or `FAILED_BUILD`/`FAILED_UPDATE`. Non-critical errors like `NOT_PERFORMED_BUILD`/`UPDATE` are still collected but do not halt execution.
+        -   `PropagationLevel.STOP_ON_ANY_ERROR` (2): Stops propagation immediately upon encountering *any* error, whether critical or non-critical. This includes `NOT_PERFORMED_BUILD`/`UPDATE` errors.
     -   `max_workers`: The maximum number of threads to use for parallel execution. Defaults to the system's default for `ThreadPoolExecutor`.
 -   `show()`: Displays a plot of the dependency graph.
 -   `history`: A list of `Event` and `Error` objects in chronological order of occurrence.
 -   `events`: A list of successful `Event` objects.
 -   `errors`: A list of `Error` objects.
+
+## Future Enhancements
+
+The `propagator` engine is under active development, and several key features are planned to further enhance its capabilities:
+
+-   **"Dry Run" Mode**: A planned feature to simulate a propagation run without actually executing any build or update functions. This will be invaluable for debugging and understanding the impact of changes before committing to them.
+-   **Content-Based Hashing for Change Detection**: Currently, change detection relies on file modification timestamps. Future plans include implementing content-based hashing (e.g., SHA256) to provide a more robust and accurate way to determine if a resource has truly changed, independent of its timestamp.
+-   **Enhanced Logging and Verbosity Levels**: More granular control over logging output to provide clearer insights into the propagation process, from quiet mode (errors only) to highly verbose debugging information.
+-   **Plugin System for Custom Location Types**: Further abstraction to allow users to easily register and use their own custom `Location` subclasses (e.g., for S3, databases, web APIs) without modifying the core engine.
+
+Stay tuned for these and other improvements!
