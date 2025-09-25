@@ -9,7 +9,7 @@ Think of it as a Python-native alternative to `make`, designed for orchestrating
 -   **Dependency Management**: Define dependencies between resources to create a clear and robust execution graph.
    -   **Topological Execution**: Resources are processed in a topologically sorted order, ensuring dependencies are met before a resource is built or updated.
    -   **Automatic Update Propagation**: The engine automatically detects if a dependency is newer than a target resource and triggers an update.
-   -   **Parallel Execution**: Automatically executes independent build/update tasks in parallel for significant speed improvements on multi-core systems.
+   -   **Parallel Execution**: The engine leverages Python's `concurrent.futures.ThreadPoolExecutor` to automatically execute independent build or update tasks in parallel. This can lead to significant speed improvements on multi-core systems. The degree of parallelism can be controlled via the `max_workers` parameter in the `run()` method.
    -   **Cyclic Dependency Detection**: Automatically detects and reports cyclic dependencies to prevent infinite loops.
    -   **Custom Build/Update Logic**: Provide your own Python functions for building and updating each resource, giving you full control over the process.
    -   **Error Handling**: Captures exceptions during execution and provides detailed error reports. Propagation can be configured to stop on first error or to collect all errors.
@@ -151,6 +151,78 @@ except Exception as e:
     `python example.py`
 
 The script will first build all targets. If you run it again, it will do nothing. If you `touch src/lib.c` and run it again, it will intelligently recompile `lib.o` and relink `program`, but it will not recompile `main.o`.
+
+## Extending Propagator
+
+### Custom Location Types
+
+The `propagator` engine is designed to be flexible, allowing you to define your own `Location` types beyond the default `FileLocation`. This enables you to manage resources that are not files, such as database entries, API endpoints, or cloud storage objects.
+
+To create a custom `Location` type, you need to subclass `propagator.Location` (assuming `propagator.Location` is the base abstract class, or `propagator.FileLocation` if your custom location is file-like but needs additional logic) and implement the following methods:
+
+-   `exists(self) -> bool`: Returns `True` if the resource at this location exists, `False` otherwise.
+-   `get_timestamp(self) -> float`: Returns a timestamp (e.g., Unix timestamp) representing the last modification time of the resource. This is crucial for dependency checking.
+-   `is_older_than(self, other_location: 'Location') -> bool`: Compares the timestamp of this location with another `Location` object. Returns `True` if this location's resource is older than `other_location`'s resource, `False` otherwise.
+
+Here's an example of a hypothetical `DatabaseEntryLocation`:
+
+```python
+import datetime
+from propagator import Location # Assuming propagator.Location is the base class
+
+class DatabaseEntryLocation(Location):
+    def __init__(self, table_name: str, entry_id: str):
+        self.table_name = table_name
+        self.entry_id = entry_id
+        # In a real scenario, you'd have a database connection here
+        # For this example, we'll simulate existence and timestamps
+
+    def exists(self) -> bool:
+        # Simulate checking if a database entry exists
+        # e.g., SELECT COUNT(*) FROM {self.table_name} WHERE id = {self.entry_id}
+        print(f"Checking existence for DB entry {self.entry_id} in {self.table_name}")
+        return True # For demonstration purposes
+
+    def get_timestamp(self) -> float:
+        # Simulate getting the last update timestamp from the database
+        # e.g., SELECT last_modified FROM {self.table_name} WHERE id = {self.entry_id}
+        # For demonstration, return current time or a fixed time
+        print(f"Getting timestamp for DB entry {self.entry_id} in {self.table_name}")
+        return datetime.datetime.now().timestamp()
+
+    def is_older_than(self, other_location: 'Location') -> bool:
+        # This method is crucial for dependency checking
+        # It determines if the resource at this location needs to be updated
+        if not isinstance(other_location, Location):
+            # If comparing with a non-Location type, we can't determine age
+            return False 
+        
+        # A resource that doesn't exist is considered "older" than anything that does,
+        # implying it needs to be built.
+        if not self.exists():
+            return True
+        
+        # If the other resource doesn't exist, this one isn't older than it.
+        # (It might be newer, or both might not exist, but it doesn't need updating based on other)
+        if not other_location.exists():
+            return False
+
+        # If both exist, compare their timestamps
+        return self.get_timestamp() < other_location.get_timestamp()
+
+    def __str__(self):
+        return f"DB:{self.table_name}/{self.entry_id}"
+
+    def __eq__(self, other):
+        if not isinstance(other, Location):
+            return NotImplemented
+        return (isinstance(other, DatabaseEntryLocation) and
+                self.table_name == other.table_name and
+                self.entry_id == other.entry_id)
+
+    def __hash__(self):
+        return hash((self.table_name, self.entry_id))
+```
 
 ## Testing
 
