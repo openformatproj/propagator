@@ -1,12 +1,6 @@
 import pytest
 import pathlib
 import time
-import os
-import sys
-
-# Add the project root to the Python path to ensure the propagator module can be found
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-sys.path.insert(0, project_root)
 
 from propagator import Propagator, Resource, FileLocation, void_function, Error, ErrorTypes, EventTypes, PropagationLevel
 

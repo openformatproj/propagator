@@ -30,13 +30,31 @@ Think of it as a Python-native alternative to `make`, designed for orchestrating
 
 ## Installation
 
-The engine relies on a few external libraries. You can install them using pip:
+1.  **Clone the Repository**
 
-```bash
-pip install networkx matplotlib alive-progress
-```
+    First, clone the repository from GitHub to your local machine and navigate into the project directory.
 
-Then, simply place the `propagator` directory within your project's source tree.
+    ```bash
+    git clone https://github.com/openformatproj/propagator.git
+    ```
+
+2.  **Create and Activate a Virtual Environment**
+
+    From the root of the project directory, create and activate a Python virtual environment. This ensures that dependencies are managed cleanly.
+
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate
+    ```
+
+3.  **Install Dependencies and the Package**
+
+    Install the required libraries and then install the `propagator` package itself in "editable" mode. This mode makes the package available to your environment, which is necessary for both running examples and the test suite.
+
+    ```bash
+    pip install -r propagator/requirements.txt
+    pip install -e .
+    ```
 
 ## Quick Start
 
@@ -127,20 +145,24 @@ except Exception as e:
 
 ### Running the Example
 
-1.  Save the code above as `example.py`.
-2.  Ensure the `propagator` package directory is in the same directory as `example.py`. The structure should look like this:
-    ```
-    my_project/
-    ├── example.py
-    └── propagator/
-        ├── __init__.py
-        ├── engine.py
-        ├── conf.py
-        └── types.py
-    ```
-3.  From your terminal, inside the `my_project` directory, run the script: `python example.py`.
+1.  Save the code above as `example.py` in your project directory.
+2.  Make sure you have activated your virtual environment (`source venv/bin/activate`).
+3.  Run the script from your terminal:
+    `python example.py`
 
 The script will first build all targets. If you run it again, it will do nothing. If you `touch src/lib.c` and run it again, it will intelligently recompile `lib.o` and relink `program`, but it will not recompile `main.o`.
+
+## Testing
+
+The project includes a test suite using `pytest`. To run the tests, first ensure you have followed the installation steps.
+
+From the root of the project directory, simply run:
+
+```bash
+pytest
+```
+
+Pytest will automatically discover and run all the tests in the `test/` directory, reporting the results to your console.
 
 ## API Reference
 
