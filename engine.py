@@ -228,16 +228,11 @@ class Propagator:
                     # Combine checks: skip if a dependency failed OR a direct requirement is missing
                     should_skip = should_skip or not all_reqs_exist
 
-                    if should_skip and block_propagation_level >= PropagationLevel.STOP_ON_CRITICAL_ERROR:
-                        # A dependency failed, so we skip this node and all subsequent nodes
-                        # Fill the rest of the progress bar
-                        while bar.current < len(identifiers):
-                            bar()
-                        break
-
-                    # Submit the current node for processing
                     if should_skip:
-                        # If we are just collecting errors, we must still advance the bar.
+                        # Create a dummy completed future representing the skipped/failed dependency to propagate failure
+                        dummy_fut = concurrent.futures.Future()
+                        dummy_fut.set_result(([], [Error(ErrorTypes.FAILED_BUILD, self.resources[identifier])]))
+                        futures[identifier] = dummy_fut
                         bar()
                         continue
 
