@@ -1,0 +1,8 @@
+#%Module1.0
+set topdir $env(HOME)/tools/propagator
+setenv PROPAGATOR_HOME $topdir
+append-path PYTHONPATH $env(HOME)/tools
+if {[file exists $topdir/venv]} {
+    prepend-path PATH $topdir/venv/bin
+    setenv VIRTUAL_ENV $topdir/venv
+}
