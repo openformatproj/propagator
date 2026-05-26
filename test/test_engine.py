@@ -201,3 +201,108 @@ def test_valid_dependency():
     res2 = Resource(FileLocation(pathlib.Path("path2")), "res2", void_function, void_function)
 
     assert Propagator.valid_dependency(res1, res2)
+
+
+def test_poll_status(propagator_instance, tmp_path):
+    """Tests the poll() method to correctly classify TODO, OUT_OF_DATE, and DONE states."""
+    req_path = tmp_path / "req.txt"
+    target_path = tmp_path / "target.txt"
+
+    req = Resource(FileLocation(req_path), "req", void_function, void_function)
+    target = Resource(FileLocation(target_path), "target", void_function, void_function)
+    propagator_instance.add(req, target)
+
+    # 1. Initially, neither exists -> both should be "TODO"
+    status = propagator_instance.poll()
+    assert status["req"] == "TODO"
+    assert status["target"] == "TODO"
+
+    # 2. Create req, but not target -> req is "DONE", target is "TODO"
+    req_path.write_text("source")
+    status = propagator_instance.poll()
+    assert status["req"] == "DONE"
+    assert status["target"] == "TODO"
+
+    # 3. Create target after req -> both are "DONE"
+    time.sleep(0.05)
+    target_path.write_text("built")
+    status = propagator_instance.poll()
+    assert status["req"] == "DONE"
+    assert status["target"] == "DONE"
+
+    # 4. Modify req to be newer than target -> req is "DONE", target is "OUT_OF_DATE"
+    time.sleep(0.05)
+    req_path.write_text("updated source")
+    status = propagator_instance.poll()
+    assert status["req"] == "DONE"
+    assert status["target"] == "OUT_OF_DATE"
+
+
+def test_rollback_resource(propagator_instance, tmp_path):
+    """Tests the rollback_resource() method to transitively unlink output files of descendants."""
+    res1_path = tmp_path / "res1.txt"
+    res2_path = tmp_path / "res2.txt"
+    res3_path = tmp_path / "res3.txt"
+
+    res1 = Resource(FileLocation(res1_path), "res1", void_function, void_function)
+    res2 = Resource(FileLocation(res2_path), "res2", void_function, void_function)
+    res3 = Resource(FileLocation(res3_path), "res3", void_function, void_function)
+
+    # Chain: res1 -> res2 -> res3
+    propagator_instance.add(res1, res2)
+    propagator_instance.add(res2, res3)
+
+    # Create files for all resources
+    res1_path.write_text("1")
+    res2_path.write_text("2")
+    res3_path.write_text("3")
+
+    # Invalidate res2 recursively
+    propagator_instance.rollback_resource("res2")
+
+    # res1 should still exist (upstream)
+    assert res1_path.exists()
+    # res2 and res3 should be deleted (descendants)
+    assert not res2_path.exists()
+    assert not res3_path.exists()
+
+
+def test_branch_failure_isolation(propagator_instance, tmp_path):
+    """Tests that a failure in one branch isolates execution, letting sibling branches complete successfully."""
+    # DAG layout:
+    #   branch_a_req (success) -> branch_a_target (success)
+    #   branch_b_req (fails)   -> branch_b_target (blocked)
+    
+    a_req_path = tmp_path / "a_req.txt"
+    a_target_path = tmp_path / "a_target.txt"
+    b_req_path = tmp_path / "b_req.txt"
+    b_target_path = tmp_path / "b_target.txt"
+
+    # Branch A: successful
+    def a_builder(location, requirements):
+        location.path.write_text("success_a")
+        return "A Done"
+    a_req = Resource(FileLocation(a_req_path), "a_req", void_function, void_function)
+    a_target = Resource(FileLocation(a_target_path), "a_target", a_builder, void_function)
+    a_req_path.write_text("ready")
+
+    # Branch B: fails due to missing requirement
+    b_req = Resource(FileLocation(b_req_path), "b_req", void_function, void_function)
+    # b_req_path is NOT written (missing requirement)
+    
+    b_target = Resource(FileLocation(b_target_path), "b_target", void_function, void_function)
+
+    propagator_instance.add(a_req, a_target)
+    propagator_instance.add(b_req, b_target)
+
+    # Running Propagator will throw error overall because of branch B failure,
+    # but branch A should still finish!
+    with pytest.raises(Error) as excinfo:
+        propagator_instance.run(max_workers=2)
+
+    assert excinfo.value.t == ErrorTypes.PROPAGATION
+    # Branch A target should have successfully completed and written its file
+    assert a_target_path.exists()
+    assert a_target_path.read_text() == "success_a"
+    # Branch B target should be blocked
+    assert not b_target_path.exists()
