@@ -114,7 +114,8 @@ class Propagator:
         self._lock = threading.Lock() # For thread-safe list appends
     @staticmethod
     def valid_dependency(requirement, target):
-        return isinstance(requirement.location, Location) and isinstance(target.location, Location)
+        return (hasattr(requirement, 'location') and isinstance(requirement.location, Location) and
+                hasattr(target, 'location') and isinstance(target.location, Location))
     def add(self, requirement, target):
         if not self.valid_dependency(requirement, target):
             raise Error(ErrorTypes.NOT_VALID_DEPENDENCY, requirement, target)
