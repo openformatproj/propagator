@@ -257,7 +257,7 @@ Pytest will automatically discover and run all the tests in the `test/` director
 ### `propagator.Propagator`
 
 -   `add(requirement: Resource, target: Resource)`: Adds a dependency to the graph.
--   `run(block_propagation_level: PropagationLevel = PropagationLevel.COLLECT_ALL_ERRORS, max_workers: int = None)`: Executes the build/update process.
+-   `run(block_propagation_level: PropagationLevel = PropagationLevel.COLLECT_ALL_ERRORS, max_workers: int = None)`: Executes the build/update process in parallel.
     -   `block_propagation_level`: Controls error handling behavior.
         -   `PropagationLevel.COLLECT_ALL_ERRORS` (0): The engine attempts to process as many resources as possible, collecting all errors (e.g., `NOT_FOUND_REQUIREMENT`, `FAILED_BUILD`, `NOT_PERFORMED_BUILD`/`UPDATE`). The `run()` method will raise a single `Error` exception at the end if any errors occurred.
         -   `PropagationLevel.STOP_ON_CRITICAL_ERROR` (1): Stops propagation immediately upon encountering a critical error, such as a `NOT_FOUND_REQUIREMENT` or `FAILED_BUILD`/`FAILED_UPDATE`. Non-critical errors like `NOT_PERFORMED_BUILD`/`UPDATE` are still collected but do not halt execution.
