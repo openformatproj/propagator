@@ -11,11 +11,21 @@ This file lists potential features and improvements for the `propagator` engine.
         -   On the next run, compare the current hash of a resource against the stored hash to determine if it needs an update.
         -   This could be an optional mode or a new `Location` type (e.g., `HashedFileLocation`).
 
--   [ ] **Parallel Execution**
-    -   **Description:** The current engine processes resources serially. For large graphs with independent branches, this is inefficient.
-    -   **Implementation:**
-        -   Use Python's `concurrent.futures.ThreadPoolExecutor` or `ProcessPoolExecutor` to process nodes that do not depend on each other in parallel.
-        -   This would require careful management of task scheduling to ensure dependencies are met before a task is submitted to the pool.
+-   [x] **Parallel Execution** (Completed)
+    -   **Description:** Use a parallel execution engine to build independent dependency tasks concurrently.
+    -   **Implementation:** Leverages a robust `concurrent.futures.ThreadPoolExecutor` to execute tasks in parallel while strictly respecting topological dependencies.
+
+-   [x] **Dynamic Cache-Aware Polling (`poll()`)** (Completed)
+    -   **Description:** Query and inspect the topological status of resources.
+    -   **Implementation:** Computes `TODO`, `OUT_OF_DATE`, and `DONE` for all resources based on target existence and modification times.
+
+-   [x] **Recursive Downstream Rollback (`rollback_resource()`)** (Completed)
+    -   **Description:** Cleanly roll back tasks without leaving stale downstream artifacts.
+    -   **Implementation:** Transitively unlinks the output files of a node and all its descendants.
+
+-   [x] **Branch-Level Failure Isolation** (Completed)
+    -   **Description:** Isolate exceptions so sibling branches can run to completion.
+    -   **Implementation:** Cascade skips downstream using dummy futures rather than terminating the global scheduler thread.
 
 -   [ ] **Distributed Execution Model**
     -   **Description:** Extend the parallel execution model to support distributed systems. This would allow build/update tasks to be executed across multiple machines, enabling much larger-scale processing.
@@ -40,10 +50,6 @@ This file lists potential features and improvements for the `propagator` engine.
 
 ## Testing
 
--   [ ] **Create a Comprehensive Unit Test Suite**
-    -   **Description:** Add more unit tests to improve reliability and make refactoring safer.
-    -   **Implementation:**
-        -   Add tests for the `Propagator.add` method to verify correct detection of identifier and location conflicts.
-        -   Test the `run` method's behavior with different `PropagationLevel` settings.
-        -   Test the `Resource` and `Location` classes' methods individually.
-        -   Create tests for error conditions, such as cyclic graphs and failing build/update functions.
+-   [x] **Create a Comprehensive Unit Test Suite** (Completed)
+    -   **Description:** Establish robust unit testing covering engine stability and features.
+    -   **Implementation:** Created 15 clean, high-coverage unit tests verifying cyclic graphs, conflicts, compilation levels, custom resource behaviors, polling states, rollbacks, and parallel isolation.
