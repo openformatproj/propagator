@@ -20,14 +20,17 @@ Think of it as a Python-native alternative to `make`, designed for orchestrating
 ## Features
 
 -   **Dependency Management**: Define dependencies between resources to create a clear and robust execution graph.
-   -   **Topological Execution**: Resources are processed in a topologically sorted order, ensuring dependencies are met before a resource is built or updated.
-   -   **Automatic Update Propagation**: The engine automatically detects if a dependency is newer than a target resource and triggers an update.
-   -   **Parallel Execution**: The engine leverages Python's `concurrent.futures.ThreadPoolExecutor` to automatically execute independent build or update tasks in parallel. This can lead to significant speed improvements on multi-core systems. The degree of parallelism can be controlled via the `max_workers` parameter in the `run()` method.
-   -   **Cyclic Dependency Detection**: Automatically detects and reports cyclic dependencies to prevent infinite loops.
-   -   **Custom Build/Update Logic**: Provide your own Python functions for building and updating each resource, giving you full control over the process.
-   -   **Error Handling**: Captures exceptions during execution and provides detailed error reports. Propagation can be configured to stop on first error or to collect all errors.
-   -   **Progress and History**: Visual feedback during execution via a progress bar (`alive-progress`) and a detailed history of all events and errors.
-   -   **Graph Visualization**: A utility to display the dependency graph using `matplotlib` and `networkx` for easy debugging and visualization.
+    -   **Topological Execution**: Resources are processed in a topologically sorted order, ensuring dependencies are met before a resource is built or updated.
+    -   **Automatic Update Propagation**: The engine automatically detects if a dependency is newer than a target resource and triggers an update.
+    -   **Parallel Execution**: The engine leverages Python's `concurrent.futures.ThreadPoolExecutor` to automatically execute independent build or update tasks in parallel. This can lead to significant speed improvements on multi-core systems. The degree of parallelism can be controlled via the `max_workers` parameter in the `run()` method.
+    -   **Branch-Level Failure Isolation**: When independent branches fail, failure cascades topologically only to their downstream dependents while allowing sibling parallel branches to execute normally.
+    -   **Granular Cache Polling**: Programmatically inspect the exact cache and build status of all nodes topologically (`TODO`, `OUT_OF_DATE`, or `DONE`).
+    -   **Recursive Downstream Rollback**: Invalidate specific nodes by deleting their files and automatically unlinking all of their transitively dependent downstream resources.
+    -   **Cyclic Dependency Detection**: Automatically detects and reports cyclic dependencies to prevent infinite loops.
+    -   **Custom Build/Update Logic**: Provide your own Python functions for building and updating each resource, giving you full control over the process.
+    -   **Error Handling**: Captures exceptions during execution and provides detailed error reports. Propagation can be configured to stop on first error or to collect all errors.
+    -   **Progress and History**: Visual feedback during execution via a progress bar (`alive-progress`) and a detailed history of all events and errors.
+    -   **Graph Visualization**: A utility to display the dependency graph using `matplotlib` and `networkx` for easy debugging and visualization.
 
 ## Core Concepts
 
@@ -260,6 +263,11 @@ Pytest will automatically discover and run all the tests in the `test/` director
         -   `PropagationLevel.STOP_ON_CRITICAL_ERROR` (1): Stops propagation immediately upon encountering a critical error, such as a `NOT_FOUND_REQUIREMENT` or `FAILED_BUILD`/`FAILED_UPDATE`. Non-critical errors like `NOT_PERFORMED_BUILD`/`UPDATE` are still collected but do not halt execution.
         -   `PropagationLevel.STOP_ON_ANY_ERROR` (2): Stops propagation immediately upon encountering *any* error, whether critical or non-critical. This includes `NOT_PERFORMED_BUILD`/`UPDATE` errors.
     -   `max_workers`: The maximum number of threads to use for parallel execution. Defaults to the system's default for `ThreadPoolExecutor`.
+-   `poll() -> Dict[str, str]`: Dynamically analyzes the execution state of all resources in the graph. Returns a dictionary mapping resource identifiers to their current status:
+    -   `"TODO"`: Target needs to be built.
+    -   `"OUT_OF_DATE"`: Target exists, but some dependency has been updated more recently.
+    -   `"DONE"`: Target is compiled and newer than all dependencies.
+-   `rollback_resource(identifier: str)`: Recursively deletes (unlinks) the output files of the target resource and all of its downstream dependents transitively.
 -   `show()`: Displays a plot of the dependency graph.
 -   `history`: A list of `Event` and `Error` objects in chronological order of occurrence.
 -   `events`: A list of successful `Event` objects.

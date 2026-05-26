@@ -270,6 +270,57 @@ class Propagator:
             # For simplicity, we'll just advance the bar. A more robust implementation might log this.
             bar()
 
+    def poll(self) -> dict:
+        """
+        Dynamically analyzes the execution state of all resources in the graph.
+        Returns a dictionary mapping resource identifiers to their current status:
+        - "TODO": Output does not exist and needs building.
+        - "OUT_OF_DATE": Output exists, but some predecessors have newer timestamps.
+        - "DONE": Output exists and is newer than all predecessors.
+        """
+        import networkx as nx
+        status_map = {}
+        if not nx.is_directed_acyclic_graph(self.graph):
+            raise Error(ErrorTypes.CYCLIC_GRAPH)
+            
+        identifiers = list(nx.topological_sort(self.graph))
+        for identifier in identifiers:
+            res = self.resources[identifier]
+            if not res.exists():
+                status_map[identifier] = "TODO"
+            else:
+                predecessors = list(self.graph.predecessors(identifier))
+                needs_update = False
+                for pred_id in predecessors:
+                    pred = self.resources[pred_id]
+                    if res <= pred:  # Target is older than or equal to requirement
+                        needs_update = True
+                        break
+                if needs_update:
+                    status_map[identifier] = "OUT_OF_DATE"
+                else:
+                    status_map[identifier] = "DONE"
+        return status_map
+
+    def rollback_resource(self, identifier: str):
+        """
+        Recursively deletes (unlinks) the output files of the target resource
+        and all of its downstream dependents transitively.
+        """
+        import networkx as nx
+        if identifier not in self.resources:
+            raise KeyError(f"Resource '{identifier}' not found in the Propagator graph.")
+            
+        # Find all downstream transitively dependent resource identifiers
+        downstream = nx.descendants(self.graph, identifier) | {identifier}
+        for desc_id in downstream:
+            res = self.resources[desc_id]
+            if isinstance(res.location, FileLocation) and res.location.exists():
+                try:
+                    res.location.path.unlink()
+                except OSError:
+                    pass
+
     def show(self):
         pos = nx.spring_layout(self.graph)
         nx.draw_networkx_nodes(self.graph, pos, cmap=plt.get_cmap('jet'), node_size = 500)
