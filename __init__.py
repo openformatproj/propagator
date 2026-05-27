@@ -12,7 +12,7 @@ from .engine import (
     void_function,
 )
 
-from .types import (
+from .prop_types import (
     EventTypes,
     ErrorTypes,
     PropagationLevel,

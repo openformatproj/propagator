@@ -6,7 +6,7 @@ import threading
 from abc import ABC, abstractmethod
 from . import conf
 from alive_progress import alive_bar
-from .types import EventTypes, PropagationLevel, ErrorTypes
+from .prop_types import EventTypes, PropagationLevel, ErrorTypes
 
 class Event:
     def __init__(self, t, *args):
