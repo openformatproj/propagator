@@ -10,4 +10,8 @@ append-path PYTHONPATH $topdir/python
 if {[file exists $topdir/venv]} {
     prepend-path PATH $topdir/venv/bin
     setenv VIRTUAL_ENV $topdir/venv
+    set site_packages [lindex [glob -nocomplain $topdir/venv/lib/python*/site-packages] 0]
+    if {$site_packages != ""} {
+        append-path PYTHONPATH $site_packages
+    }
 }
