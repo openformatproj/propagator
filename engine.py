@@ -105,12 +105,13 @@ class Resource:
         return self.location.get_state_token() < other.location.get_state_token()
 
 class Propagator:
-    def __init__(self):
+    def __init__(self, sequential: bool = False):
         self.graph = nx.DiGraph()
         self.resources = {}
         self.events = []
         self.errors = []
         self.history = []
+        self.sequential = sequential
         self._lock = threading.Lock() # For thread-safe list appends
     @staticmethod
     def valid_dependency(requirement, target):
@@ -200,14 +201,10 @@ class Propagator:
         bar_manager = alive_bar(len(identifiers))
         bar = bar_manager.__enter__()
         try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            if self.sequential or max_workers == 0:
                 for identifier in identifiers:
-                    # Wait for all dependencies of the current node to complete
                     dep_futures = [futures[pred] for pred in self.graph.predecessors(identifier) if pred in futures]
-                    if dep_futures:
-                        concurrent.futures.wait(dep_futures)
-
-                    # Pre-check: ensure all direct file requirements for the current node exist before submission.
+                    
                     all_reqs_exist = True
                     for pred_id in self.graph.predecessors(identifier):
                         if not self.resources[pred_id].exists():
@@ -216,36 +213,75 @@ class Propagator:
                                 self.errors.append(error)
                                 self.history.append(error)
                             all_reqs_exist = False
-                    
-                    # Check if any dependency failed
+                            
                     should_skip = False
                     for fut in dep_futures:
                         _, dep_errors = fut.result()
                         if dep_errors:
                             should_skip = True
                             break
-
-                    # Combine checks: skip if a dependency failed OR a direct requirement is missing
+                            
                     should_skip = should_skip or not all_reqs_exist
-
+                    
+                    dummy_fut = concurrent.futures.Future()
                     if should_skip:
-                        # Create a dummy completed future representing the skipped/failed dependency to propagate failure
-                        dummy_fut = concurrent.futures.Future()
                         dummy_fut.set_result(([], [Error(ErrorTypes.FAILED_BUILD, self.resources[identifier])]))
-                        futures[identifier] = dummy_fut
-                        bar()
-                        continue
+                    else:
+                        try:
+                            res = self._process_resource(identifier, block_propagation_level)
+                            dummy_fut.set_result(res)
+                        except Exception as e:
+                            dummy_fut.set_result(([], [Error(ErrorTypes.FAILED_BUILD, self.resources[identifier]).add_external_details(e)]))
+                            
+                    futures[identifier] = dummy_fut
+                    self._collect_results(dummy_fut, bar)
+            else:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    for identifier in identifiers:
+                        # Wait for all dependencies of the current node to complete
+                        dep_futures = [futures[pred] for pred in self.graph.predecessors(identifier) if pred in futures]
+                        if dep_futures:
+                            concurrent.futures.wait(dep_futures)
 
-                    future = executor.submit(self._process_resource, identifier, block_propagation_level)
-                    futures[identifier] = future
+                        # Pre-check: ensure all direct file requirements for the current node exist before submission.
+                        all_reqs_exist = True
+                        for pred_id in self.graph.predecessors(identifier):
+                            if not self.resources[pred_id].exists():
+                                error = Error(ErrorTypes.NOT_FOUND_REQUIREMENT, self.resources[pred_id], self.resources[identifier])
+                                with self._lock:
+                                    self.errors.append(error)
+                                    self.history.append(error)
+                                all_reqs_exist = False
+                        
+                        # Check if any dependency failed
+                        should_skip = False
+                        for fut in dep_futures:
+                            _, dep_errors = fut.result()
+                            if dep_errors:
+                                should_skip = True
+                                break
 
-                    # Update progress bar and history as tasks complete
-                    future.add_done_callback(lambda f: self._collect_results(f, bar))
+                        # Combine checks: skip if a dependency failed OR a direct requirement is missing
+                        should_skip = should_skip or not all_reqs_exist
 
-            # Final collection of any remaining results
-            for future in futures.values():
-                if not future.done():
-                    future.result() # Wait for any stragglers
+                        if should_skip:
+                            # Create a dummy completed future representing the skipped/failed dependency to propagate failure
+                            dummy_fut = concurrent.futures.Future()
+                            dummy_fut.set_result(([], [Error(ErrorTypes.FAILED_BUILD, self.resources[identifier])]))
+                            futures[identifier] = dummy_fut
+                            bar()
+                            continue
+
+                        future = executor.submit(self._process_resource, identifier, block_propagation_level)
+                        futures[identifier] = future
+
+                        # Update progress bar and history as tasks complete
+                        future.add_done_callback(lambda f: self._collect_results(f, bar))
+
+                # Final collection of any remaining results
+                for future in futures.values():
+                    if not future.done():
+                        future.result() # Wait for any stragglers
         finally:
             # Ensure the bar is closed even if errors occur
             bar_manager.__exit__(None, None, None)
