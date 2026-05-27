@@ -1,5 +1,10 @@
 #%Module1.0
-set topdir $env(HOME)/tools/propagator
+set current_dir [file normalize [file dirname $ModulesCurrentModulefile]]
+if {[file tail $current_dir] == "modulefiles"} {
+    set topdir [file dirname $current_dir]/[module-info name]
+} else {
+    set topdir $current_dir
+}
 setenv PROPAGATOR_HOME $topdir
 append-path PYTHONPATH $topdir/python
 if {[file exists $topdir/venv]} {
