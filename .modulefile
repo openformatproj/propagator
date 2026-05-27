@@ -6,7 +6,7 @@ if {[file tail $current_dir] == "modulefiles"} {
     set topdir $current_dir
 }
 setenv PROPAGATOR_HOME $topdir
-append-path PYTHONPATH $topdir/python
+append-path PYTHONPATH [file dirname $topdir]
 if {[file exists $topdir/venv]} {
     prepend-path PATH $topdir/venv/bin
     setenv VIRTUAL_ENV $topdir/venv
