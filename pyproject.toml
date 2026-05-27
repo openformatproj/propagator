@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "propagator"
+version = "0.1.0"
+dependencies = [
+    "networkx>=3.4.2",
+    "matplotlib>=3.10.9",
+    "alive-progress>=3.3.0",
+    "pytest>=9.0.3"
+]
+
+[tool.setuptools]
+packages = ["propagator"]
+package-dir = {"propagator" = "."}
