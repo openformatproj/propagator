@@ -168,7 +168,7 @@ class Propagator:
                 local_errors.append(error)
         else:
             # Check if an update is needed
-            needs_update = any(target <= req for req in requirements.values())
+            needs_update = any(target < req for req in requirements.values())
             if needs_update:
                 try:
                     local_events.append(Event(EventTypes.LAUNCHED_UPDATE, target))
@@ -329,7 +329,7 @@ class Propagator:
                 needs_update = False
                 for pred_id in predecessors:
                     pred = self.resources[pred_id]
-                    if res <= pred:  # Target is older than or equal to requirement
+                    if res < pred:  # Target is older than requirement
                         needs_update = True
                         break
                 if needs_update:
