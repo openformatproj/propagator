@@ -321,21 +321,27 @@ class Propagator:
             
         identifiers = list(nx.topological_sort(self.graph))
         for identifier in identifiers:
-            res = self.resources[identifier]
-            if not res.exists():
-                status_map[identifier] = "TODO"
+            predecessors = list(self.graph.predecessors(identifier))
+            if not predecessors:
+                status_map[identifier] = "-"
             else:
-                predecessors = list(self.graph.predecessors(identifier))
-                needs_update = False
-                for pred_id in predecessors:
-                    pred = self.resources[pred_id]
-                    if res < pred:  # Target is older than requirement
-                        needs_update = True
-                        break
-                if needs_update:
-                    status_map[identifier] = "OUT_OF_DATE"
+                res = self.resources[identifier]
+                if not res.exists():
+                    status_map[identifier] = "TODO"
                 else:
-                    status_map[identifier] = "DONE"
+                    needs_update = False
+                    for pred_id in predecessors:
+                        pred = self.resources[pred_id]
+                        if res < pred:  # Target is older than requirement
+                            needs_update = True
+                            break
+                        if status_map.get(pred_id) in ("TODO", "OUT_OF_DATE"):
+                            needs_update = True
+                            break
+                    if needs_update:
+                        status_map[identifier] = "OUT_OF_DATE"
+                    else:
+                        status_map[identifier] = "DONE"
         return status_map
 
     def rollback_resource(self, identifier: str):
