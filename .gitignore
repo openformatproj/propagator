@@ -13,3 +13,6 @@ bin/
 # Test artifacts
 test/*
 !test/*.py
+
+# Git configuration
+.gitconfig
