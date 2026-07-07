@@ -372,3 +372,26 @@ class Propagator:
 
 def void_function(location, requirements):
     pass
+
+def touch_target(location: Location, requirements: dict):
+    """
+    Safely updates the modification time (st_mtime) of a target file location 
+    to be strictly newer than the modification times of all its requirement/dependency resources 
+    and the current system time.
+
+    This helper is critical for multi-environment development (e.g., WSL host-container mounts)
+    where clock skew, filesystem mounting quirks, or time zone mismatches (such as local time vs UTC)
+    can cause newly written files to have modification times in the past relative to host files.
+    By enforcing a timestamp greater than all requirements, it prevents Propagator completion checks 
+    from incorrectly flaggering the build/update as unperformed (NOT_PERFORMED_UPDATE).
+    """
+    import time
+    import os
+    if hasattr(location, 'path') and location.path.exists():
+        req_times = []
+        for req in requirements.values():
+            if hasattr(req, 'location') and req.location:
+                req_times.append(req.location.get_state_token())
+        max_req_time = max(req_times) if req_times else 0.0
+        new_time = max(time.time(), max_req_time) + 1.0
+        os.utime(location.path, (new_time, new_time))
